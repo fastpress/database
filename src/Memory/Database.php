@@ -6,57 +6,85 @@ class Database
 {
     private static ?\PDO $connection = null;
     private array $config;
+    private array $queries = [];
 
     public function __construct(array $config)
     {
         $this->config = $config;
     }
 
+    private function quoteIdentifier(string $identifier): string
+    {
+        return '`' . str_replace('`', '``', $identifier) . '`';
+    }
+
     public function select(string $table, array $columns = ['*'], array $where = []): ?array 
     {
-        $sql = "SELECT " . implode(', ', $columns) . " FROM " . $table;
+        $columns = array_map(function($col) {
+            return $col === '*' ? $col : $this->quoteIdentifier($col);
+        }, $columns);
+
+        $sql = "SELECT " . implode(', ', $columns) . " FROM " . $this->quoteIdentifier($table);
         
+        $params = [];
         if (!empty($where)) {
             $conditions = [];
             foreach ($where as $key => $value) {
-                $conditions[] = "$key = :$key";
+                $paramKey = 'where_' . count($params);
+                $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+                $params[$paramKey] = $value;
             }
             $sql .= " WHERE " . implode(' AND ', $conditions);
         }
 
         $stmt = $this->prepare($sql);
-        $stmt->execute($where);
+        $stmt->execute($params);
         
         return $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 
     public function selectAll(string $table, array $columns = ['*'], array $where = []): array 
     {
-        $sql = "SELECT " . implode(', ', $columns) . " FROM " . $table;
+        $columns = array_map(function($col) {
+            return $col === '*' ? $col : $this->quoteIdentifier($col);
+        }, $columns);
+
+        $sql = "SELECT " . implode(', ', $columns) . " FROM " . $this->quoteIdentifier($table);
         
+        $params = [];
         if (!empty($where)) {
             $conditions = [];
             foreach ($where as $key => $value) {
-                $conditions[] = "$key = :$key";
+                $paramKey = 'where_' . count($params);
+                $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+                $params[$paramKey] = $value;
             }
             $sql .= " WHERE " . implode(' AND ', $conditions);
         }
 
         $stmt = $this->prepare($sql);
-        $stmt->execute($where);
+        $stmt->execute($params);
         
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function insert(string $table, array $data): int 
     {
-        $columns = implode(', ', array_keys($data));
-        $values = implode(', ', array_map(fn($item) => ":$item", array_keys($data)));
-        
-        $sql = "INSERT INTO $table ($columns) VALUES ($values)";
-        
+        $columns = [];
+        $placeholders = [];
+        $params = [];
+
+        foreach ($data as $key => $value) {
+            $sanitizedKey = 'param_' . count($params);
+            $columns[] = $this->quoteIdentifier($key);
+            $placeholders[] = ':' . $sanitizedKey;
+            $params[$sanitizedKey] = $value;
+        }
+
+        $sql = "INSERT INTO " . $this->quoteIdentifier($table) . " (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+
         $stmt = $this->prepare($sql);
-        $stmt->execute($data);
+        $stmt->execute($params);
         
         return (int)$this->getConnection()->lastInsertId();
     }
@@ -64,24 +92,22 @@ class Database
     public function update(string $table, array $data, array $where): int 
     {
         $set = [];
+        $params = [];
+
         foreach ($data as $key => $value) {
-            $set[] = "$key = :set_$key";
+            $paramKey = 'set_' . count($params);
+            $set[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+            $params[$paramKey] = $value;
         }
         
         $conditions = [];
         foreach ($where as $key => $value) {
-            $conditions[] = "$key = :where_$key";
+            $paramKey = 'where_' . count($params);
+            $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+            $params[$paramKey] = $value;
         }
         
-        $sql = "UPDATE $table SET " . implode(', ', $set) . " WHERE " . implode(' AND ', $conditions);
-        
-        $params = [];
-        foreach ($data as $key => $value) {
-            $params["set_$key"] = $value;
-        }
-        foreach ($where as $key => $value) {
-            $params["where_$key"] = $value;
-        }
+        $sql = "UPDATE " . $this->quoteIdentifier($table) . " SET " . implode(', ', $set) . " WHERE " . implode(' AND ', $conditions);
         
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
@@ -92,14 +118,18 @@ class Database
     public function delete(string $table, array $where): int 
     {
         $conditions = [];
+        $params = [];
+
         foreach ($where as $key => $value) {
-            $conditions[] = "$key = :$key";
+            $paramKey = 'where_' . count($params);
+            $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+            $params[$paramKey] = $value;
         }
         
-        $sql = "DELETE FROM $table WHERE " . implode(' AND ', $conditions);
+        $sql = "DELETE FROM " . $this->quoteIdentifier($table) . " WHERE " . implode(' AND ', $conditions);
         
         $stmt = $this->prepare($sql);
-        $stmt->execute($where);
+        $stmt->execute($params);
         
         return $stmt->rowCount();
     }
@@ -114,7 +144,13 @@ class Database
 
     private function prepare(string $sql): \PDOStatement
     {
+        $this->queries[] = $sql;
         return $this->getConnection()->prepare($sql);
+    }
+
+    public function getQueries(): array
+    {
+        return $this->queries;
     }
 
     private function getConnection(): \PDO
