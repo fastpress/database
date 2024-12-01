@@ -1,6 +1,6 @@
 <?php
 
-namespace Fastpress\Database;
+namespace Fastpress\Memory;
 
 class Database 
 {
