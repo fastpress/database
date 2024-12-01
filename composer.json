@@ -2,7 +2,7 @@
     "name": "fastpress/database",
     "description": "A simple database abstraction layer for PHP applications",
     "type": "library",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "license": "MIT",
     "authors": [
         {
@@ -16,7 +16,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Fastpress\\Database\\": "src/Memory/"
+            "Fastpress\\Memory\\": "src/Memory/"
         }
     },
     "minimum-stability": "stable"
