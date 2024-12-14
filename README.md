@@ -1,101 +1,95 @@
-# Fastpress\Database\Database Class
+# Fastpress\Memory\Database
 
-The `Database` class provides a simple interface for interacting with a MySQL database using PDO. It supports basic CRUD operations and allows for raw query execution. Below is a detailed explanation of the public methods available in this class.
+This class provides a simple database abstraction layer built on top of PDO, enabling you to interact with a MySQL database. It simplifies common CRUD (Create, Read, Update, Delete) operations and lets you run raw queries if needed.
 
-## Public Methods
+## Features
 
-### `__construct(array $config)`
+- PHP 8.0+
+- PDO extension enabled
+- A MySQL database
 
-- **Description**: Initializes the `Database` object with the given configuration.
-- **Parameters**:
-  - `array $config`: An associative array containing database connection details such as host, port, database name, username, password, and charset.
+## Installation
 
-### `select(string $table, array $columns = ['*'], array $where = []): ?array`
+Install via Composer:
 
-- **Description**: Fetches a single record from the specified table.
-- **Parameters**:
-  - `string $table`: The name of the table to query.
-  - `array $columns`: An array of column names to select. Defaults to all columns (`['*']`).
-  - `array $where`: An associative array of conditions for the WHERE clause.
-- **Returns**: An associative array representing the fetched record or `null` if no record is found.
-
-### `selectAll(string $table, array $columns = ['*'], array $where = []): array`
-
-- **Description**: Fetches all records from the specified table that match the given conditions.
-- **Parameters**:
-  - `string $table`: The name of the table to query.
-  - `array $columns`: An array of column names to select. Defaults to all columns (`['*']`).
-  - `array $where`: An associative array of conditions for the WHERE clause.
-- **Returns**: An array of associative arrays representing the fetched records.
-
-### `insert(string $table, array $data): int`
-
-- **Description**: Inserts a new record into the specified table.
-- **Parameters**:
-  - `string $table`: The name of the table where data will be inserted.
-  - `array $data`: An associative array of column-value pairs to insert.
-- **Returns**: The ID of the inserted record as an integer.
-
-### `update(string $table, array $data, array $where): int`
-
-- **Description**: Updates existing records in the specified table based on given conditions.
-- **Parameters**:
-  - `string $table`: The name of the table to update.
-  - `array $data`: An associative array of column-value pairs to update.
-  - `array $where`: An associative array of conditions for the WHERE clause.
-- **Returns**: The number of affected rows as an integer.
-
-### `delete(string $table, array $where): int`
-
-- **Description**: Deletes records from the specified table based on given conditions.
-- **Parameters**:
-  - `string $table`: The name of the table from which records will be deleted.
-  - `array $where`: An associative array of conditions for the WHERE clause.
-- **Returns**: The number of affected rows as an integer.
-
-### `query(string $sql, array $params = []): \PDOStatement`
-
-- **Description**: Executes a raw SQL query with optional parameters.
-- **Parameters**:
-  - `string $sql`: The raw SQL query to execute.
-  - `array $params`: An associative array of parameters to bind to the query.
-- **Returns**: A PDOStatement object representing the result set.
-
-### `getQueries(): array`
-
-- **Description**: Retrieves all executed SQL queries during the current session.
-- **Returns**: An array of strings representing executed SQL queries.
-
+```bash
+composer require fastpress/memory
+```
 ## Usage Example
-
 ```php
-use Fastpress\Database\Database;
+<?php
 
-// Configuration
+use Fastpress\Memory\Database;
+
 $config = [
     'host' => 'localhost',
     'port' => '3306',
-    'database' => 'my_database',
-    'username' => 'root',
-    'password' => '',
-    'charset' => 'utf8mb4'
+    'database' => 'your_database',
+    'charset' => 'utf8mb4',
+    'username' => 'your_username',
+    'password' => 'your_password'
 ];
 
-// Initialize Database object
 $db = new Database($config);
 
-// Insert example
-$insertId = $db->insert('users', ['name' => 'John Doe', 'email' => 'john@example.com']);
+// Select a single row
+$user = $db->select('users', ['id', 'name', 'email'], ['id' => 1]);
+if ($user) {
+    echo "Name: {$user['name']}, Email: {$user['email']}";
+}
 
-// Select example
-$user = $db->select('users', ['name', 'email'], ['id' => $insertId]);
+// Select multiple rows
+$allUsers = $db->selectAll('users', ['id', 'name', 'email']);
+foreach ($allUsers as $u) {
+    echo "ID: {$u['id']}, Name: {$u['name']}\n";
+}
 
-// Update example
-$affectedRows = $db->update('users', ['email' => 'john.doe@example.com'], ['id' => $insertId]);
+// Insert a new row
+$newUserId = $db->insert('users', [
+    'name' => 'John Doe',
+    'email' => 'john@example.com'
+]);
+echo "Inserted user ID: $newUserId";
 
-// Delete example
-$deletedRows = $db->delete('users', ['id' => $insertId]);
+// Update existing rows
+$rowsUpdated = $db->update('users', [
+    'email' => 'john.doe@example.com'
+], [
+    'id' => $newUserId
+]);
+echo "$rowsUpdated row(s) updated.";
 
-// Raw query example
-$stmt = $db->query('SELECT * FROM users WHERE email LIKE :email', ['email' => '%example.com']);
-$users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+// Delete rows
+$rowsDeleted = $db->delete('users', [
+    'id' => $newUserId
+]);
+echo "$rowsDeleted row(s) deleted.";
+
+// Running a raw query
+$stmt = $db->query("SELECT COUNT(*) as total FROM `users`");
+$result = $stmt->fetch(PDO::FETCH_ASSOC);
+echo "Total users: {$result['total']}";
+```
+## Methods
+```php
+select($table, $columns = ['*'], $where = [])
+// Fetches a single row.
+
+selectAll($table, $columns = ['*'], $where = [])
+// Fetches all rows matching criteria.
+
+insert($table, $data)
+// Inserts a new row and returns the inserted ID.
+
+update($table, $data, $where)
+// Updates rows matching where conditions and returns the number of affected rows.
+
+delete($table, $where)
+// Deletes rows matching where conditions and returns the number of affected rows.
+
+query($sql, $params = [])
+// Executes a raw SQL query.
+
+getQueries()
+// Returns an array of executed queries.
+```
