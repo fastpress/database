@@ -40,6 +40,29 @@ class Database
     }
 
     /**
+     * Sanitizes an ORDER BY clause to prevent SQL injection.
+     * Only allows column names (with optional table prefix) and ASC/DESC direction.
+     *
+     * @param string $orderBy The ORDER BY string (e.g. 'name ASC', 'id DESC').
+     * @return string The sanitized ORDER BY clause.
+     * @throws \InvalidArgumentException If the ORDER BY clause contains invalid characters.
+     */
+    private function sanitizeOrderBy(string $orderBy): string
+    {
+        $parts = array_map('trim', explode(',', $orderBy));
+        $sanitized = [];
+
+        foreach ($parts as $part) {
+            if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_.]*(\s+(ASC|DESC))?$/i', $part)) {
+                throw new \InvalidArgumentException("Invalid ORDER BY clause: {$part}");
+            }
+            $sanitized[] = $part;
+        }
+
+        return implode(', ', $sanitized);
+    }
+
+    /**
      * Select a single row from a table.
      *
      * @param string $table The table name.
@@ -111,7 +134,7 @@ class Database
         }
 
         if ($orderBy !== null) {
-            $sql .= " ORDER BY " . $orderBy;
+            $sql .= " ORDER BY " . $this->sanitizeOrderBy($orderBy);
         }
 
         if ($limit !== null) {
