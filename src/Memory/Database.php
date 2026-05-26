@@ -138,9 +138,9 @@ class Database
         }
 
         if ($limit !== null) {
-            $sql .= " LIMIT " . (int)$limit;
+            $sql .= " LIMIT " . $limit;
             if ($offset !== null) {
-                $sql .= " OFFSET " . (int)$offset;
+                $sql .= " OFFSET " . $offset;
             }
         }
 
