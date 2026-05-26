@@ -2,7 +2,6 @@
     "name": "fastpress/database",
     "description": "A simple database abstraction layer for PHP applications",
     "type": "library",
-    "version": "0.1.5",
     "require": {
         "php": "^8.0",
         "ext-pdo": "*"
@@ -30,7 +29,14 @@
             "email": "samayo@pm.me"
         }
     ],
-    "keywords": ["database", "pdo", "php", "fastpress", "orm", "framework"],
+    "keywords": [
+        "database",
+        "pdo",
+        "php",
+        "fastpress",
+        "orm",
+        "framework"
+    ],
     "homepage": "https://github.com/fastpress/database",
     "support": {
         "issues": "https://github.com/fastpress/database/issues",
@@ -40,11 +46,6 @@
         "optimize-autoloader": true,
         "platform": {
             "php": "8.0"
-        }
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-main": "1.0.x-dev"
         }
     },
     "minimum-stability": "stable"
