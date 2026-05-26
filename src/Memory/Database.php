@@ -1,26 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Class Database
  *
- * This class provides a simple database abstraction layer on top of PDO.
- * It supports basic CRUD operations (select, insert, update, delete)
- * and allows the execution of raw queries. It uses prepared statements
- * to prevent SQL injection attacks. The class also quotes identifiers (table and column names)
- * to avoid reserved keyword issues. The connection is established using a DSN, username, and password
- * provided in the configuration array.
+ * A simple database abstraction layer on top of PDO.
+ * Supports CRUD operations, raw queries, and transactions.
+ * Uses prepared statements to prevent SQL injection.
  */
 
 namespace Fastpress\Memory;
 
-class Database 
+class Database
 {
-    private static ?\PDO $connection = null;
+    private ?\PDO $connection = null;
     private array $config;
     private array $queries = [];
 
     /**
-     * Constructor
+     * Constructor.
      *
      * @param array $config Configuration array with keys: host, port, database, charset, username, password
      */
@@ -30,7 +29,7 @@ class Database
     }
 
     /**
-     * Quotes an identifier (e.g., table or column name) to prevent issues with reserved keywords.
+     * Quotes an identifier (table or column name) to prevent issues with reserved keywords.
      *
      * @param string $identifier The identifier to quote.
      * @return string The quoted identifier.
@@ -46,16 +45,16 @@ class Database
      * @param string $table The table name.
      * @param array $columns The columns to select. Defaults to ['*'].
      * @param array $where An associative array of conditions (column => value).
-     * @return array|null Returns an associative array of the selected row, or null if no row was found.
+     * @return array|null Returns an associative array of the selected row, or null if not found.
      */
-    public function select(string $table, array $columns = ['*'], array $where = []): ?array 
+    public function select(string $table, array $columns = ['*'], array $where = []): ?array
     {
         $columns = array_map(function($col) {
             return $col === '*' ? $col : $this->quoteIdentifier($col);
         }, $columns);
 
         $sql = "SELECT " . implode(', ', $columns) . " FROM " . $this->quoteIdentifier($table);
-        
+
         $params = [];
         if (!empty($where)) {
             $conditions = [];
@@ -67,9 +66,11 @@ class Database
             $sql .= " WHERE " . implode(' AND ', $conditions);
         }
 
+        $sql .= " LIMIT 1";
+
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
-        
+
         return $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 
@@ -79,16 +80,64 @@ class Database
      * @param string $table The table name.
      * @param array $columns The columns to select. Defaults to ['*'].
      * @param array $where An associative array of conditions (column => value).
+     * @param string|null $orderBy Column to order by (e.g. 'created_at DESC').
+     * @param int|null $limit Maximum number of rows to return.
+     * @param int|null $offset Number of rows to skip.
      * @return array Returns an array of associative arrays for each selected row.
      */
-    public function selectAll(string $table, array $columns = ['*'], array $where = []): array 
-    {
+    public function selectAll(
+        string $table,
+        array $columns = ['*'],
+        array $where = [],
+        ?string $orderBy = null,
+        ?int $limit = null,
+        ?int $offset = null
+    ): array {
         $columns = array_map(function($col) {
             return $col === '*' ? $col : $this->quoteIdentifier($col);
         }, $columns);
 
         $sql = "SELECT " . implode(', ', $columns) . " FROM " . $this->quoteIdentifier($table);
-        
+
+        $params = [];
+        if (!empty($where)) {
+            $conditions = [];
+            foreach ($where as $key => $value) {
+                $paramKey = 'where_' . count($params);
+                $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
+                $params[$paramKey] = $value;
+            }
+            $sql .= " WHERE " . implode(' AND ', $conditions);
+        }
+
+        if ($orderBy !== null) {
+            $sql .= " ORDER BY " . $orderBy;
+        }
+
+        if ($limit !== null) {
+            $sql .= " LIMIT " . (int)$limit;
+            if ($offset !== null) {
+                $sql .= " OFFSET " . (int)$offset;
+            }
+        }
+
+        $stmt = $this->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Count rows in a table.
+     *
+     * @param string $table The table name.
+     * @param array $where An associative array of conditions (column => value).
+     * @return int The number of matching rows.
+     */
+    public function count(string $table, array $where = []): int
+    {
+        $sql = "SELECT COUNT(*) FROM " . $this->quoteIdentifier($table);
+
         $params = [];
         if (!empty($where)) {
             $conditions = [];
@@ -102,8 +151,8 @@ class Database
 
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
-        
-        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -113,7 +162,7 @@ class Database
      * @param array $data An associative array of column => value pairs to insert.
      * @return int Returns the last inserted ID.
      */
-    public function insert(string $table, array $data): int 
+    public function insert(string $table, array $data): int
     {
         $columns = [];
         $placeholders = [];
@@ -126,12 +175,13 @@ class Database
             $params[$sanitizedKey] = $value;
         }
 
-        $sql = "INSERT INTO " . $this->quoteIdentifier($table) . " (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        $sql = "INSERT INTO " . $this->quoteIdentifier($table)
+            . " (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
 
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
-        
-        return (int)$this->getConnection()->lastInsertId();
+
+        return (int) $this->getConnection()->lastInsertId();
     }
 
     /**
@@ -139,10 +189,10 @@ class Database
      *
      * @param string $table The table name.
      * @param array $data An associative array of column => value pairs to update.
-     * @param array $where An associative array of conditions (column => value) to determine which rows to update.
+     * @param array $where An associative array of conditions (column => value).
      * @return int Returns the number of rows affected.
      */
-    public function update(string $table, array $data, array $where): int 
+    public function update(string $table, array $data, array $where): int
     {
         $set = [];
         $params = [];
@@ -152,19 +202,21 @@ class Database
             $set[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
             $params[$paramKey] = $value;
         }
-        
+
         $conditions = [];
         foreach ($where as $key => $value) {
             $paramKey = 'where_' . count($params);
             $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
             $params[$paramKey] = $value;
         }
-        
-        $sql = "UPDATE " . $this->quoteIdentifier($table) . " SET " . implode(', ', $set) . " WHERE " . implode(' AND ', $conditions);
-        
+
+        $sql = "UPDATE " . $this->quoteIdentifier($table)
+            . " SET " . implode(', ', $set)
+            . " WHERE " . implode(' AND ', $conditions);
+
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
-        
+
         return $stmt->rowCount();
     }
 
@@ -175,7 +227,7 @@ class Database
      * @param array $where An associative array of conditions (column => value).
      * @return int Returns the number of rows affected.
      */
-    public function delete(string $table, array $where): int 
+    public function delete(string $table, array $where): int
     {
         $conditions = [];
         $params = [];
@@ -185,12 +237,13 @@ class Database
             $conditions[] = $this->quoteIdentifier($key) . " = :" . $paramKey;
             $params[$paramKey] = $value;
         }
-        
-        $sql = "DELETE FROM " . $this->quoteIdentifier($table) . " WHERE " . implode(' AND ', $conditions);
-        
+
+        $sql = "DELETE FROM " . $this->quoteIdentifier($table)
+            . " WHERE " . implode(' AND ', $conditions);
+
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
-        
+
         return $stmt->rowCount();
     }
 
@@ -206,6 +259,36 @@ class Database
         $stmt = $this->prepare($sql);
         $stmt->execute($params);
         return $stmt;
+    }
+
+    /**
+     * Begin a database transaction.
+     *
+     * @return bool
+     */
+    public function beginTransaction(): bool
+    {
+        return $this->getConnection()->beginTransaction();
+    }
+
+    /**
+     * Commit the current transaction.
+     *
+     * @return bool
+     */
+    public function commit(): bool
+    {
+        return $this->getConnection()->commit();
+    }
+
+    /**
+     * Roll back the current transaction.
+     *
+     * @return bool
+     */
+    public function rollBack(): bool
+    {
+        return $this->getConnection()->rollBack();
     }
 
     /**
@@ -231,25 +314,26 @@ class Database
     }
 
     /**
-     * Get the PDO connection. Establishes a new connection if it doesn't exist yet.
+     * Get the PDO connection. Establishes a new connection if one doesn't exist.
      *
      * @return \PDO The PDO connection instance.
      */
-    private function getConnection(): \PDO
+    public function getConnection(): \PDO
     {
-        if (self::$connection === null) {
-            self::$connection = new \PDO(
+        if ($this->connection === null) {
+            $this->connection = new \PDO(
                 $this->createDsn(),
                 $this->config['username'],
                 $this->config['password'],
                 [
                     \PDO::ATTR_EMULATE_PREPARES => false,
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                    \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
                 ]
             );
         }
 
-        return self::$connection;
+        return $this->connection;
     }
 
     /**
